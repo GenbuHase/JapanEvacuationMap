@@ -149,6 +149,16 @@
           <span>📡 GPS</span>
         </button>
       </div>
+
+      <!-- データ出典注記 -->
+      <div class="mt-2.5 pt-2 border-t border-neutral-800 text-[10px] text-slate-400 flex items-center justify-between">
+        <span class="text-slate-400">データ出典: 地理院 / 国交省 / Esri / OSM</span>
+      </div>
+    </div>
+
+    <!-- 地図出典・アトリビューション表示 (NERV HUD調・利用規約準拠) -->
+    <div class="absolute bottom-1 right-1.5 z-20 pointer-events-auto text-[9px] text-slate-400/90 bg-black/75 backdrop-blur-xs px-1.5 py-0.5 rounded border border-neutral-800/80 tracking-tight select-none">
+      <span>出典: 国土地理院 / 国交省 / Esri / &copy; OSM</span>
     </div>
   </div>
 </template>

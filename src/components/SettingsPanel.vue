@@ -180,23 +180,67 @@
         </label>
       </div>
 
-      <!-- リンク ＆ クレジット -->
+      <!-- 免責事項 ＆ 本プロトタイプの位置づけ -->
+      <div class="p-5 rounded-2xl bg-rose-950/20 border border-rose-900/40 space-y-3 text-xs leading-relaxed text-slate-300">
+        <div class="font-bold text-rose-400 flex items-center gap-1.5 text-sm">
+          <span>⚠️ 防災利用に関する免責事項・注意事項</span>
+        </div>
+        <ul class="space-y-1.5 list-disc list-inside text-[11px] text-slate-300/90">
+          <li>
+            <strong class="text-rose-300">アイデア実証プロトタイプ:</strong> 本アプリケーションは「文字形式の避難指示を即座に地図ポリゴン化する」という防災DXの社会的意義を検証するための研究・実証用プロトタイプです。完成された実用防災システムではありません。
+          </li>
+          <li>
+            <strong class="text-rose-300">自動取得機能は未搭載:</strong> 現在の実装状況では、自治体のエリアメールやLアラート等の外部避難情報を自動取得する機能は備えておりません。テキスト手動入力またはシミュレーション用プリセットでの動作となります。
+          </li>
+          <li>
+            <strong class="text-rose-300">公式発表の最優先:</strong> 実際の災害時には、必ず各自治体の防災無線、公式ウェブサイト、気象庁等の一次情報を最優先に確認し、速やかに命を守る避難行動をとってください。
+          </li>
+          <li>
+            <strong class="text-rose-300">免責:</strong> 端末のGPS測位誤差、通信障害、AI（Gemini API / ローカルNLP）によるテキスト解釈の誤認や不完全性等に起因する判断・損害について、開発者は一切の責任を負いません。
+          </li>
+        </ul>
+      </div>
+
+      <!-- データ出典・クレジット -->
       <div class="p-5 rounded-2xl bg-slate-900/40 border border-slate-800/80 space-y-3 text-xs text-slate-400">
-        <div class="font-bold text-slate-200">プロジェクト資材・データ出典</div>
-        <div class="flex flex-wrap gap-2 pt-1">
-          <a
-            href="../slides_slate/slide_deck.html"
-            target="_blank"
-            class="px-3 py-1.5 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 text-white font-bold transition flex items-center gap-1"
-          >
-            <span>📑 防災教育スライド（石版テーマ）</span>
-          </a>
+        <div class="font-bold text-slate-200 flex items-center gap-1.5">
+          <span>🏛️ データ出典・アトリビューション</span>
+        </div>
+        <p class="text-[11px] text-slate-400 leading-relaxed">
+          本アプリで表示している地図タイルおよび空間データは、以下の各機関・プロジェクトが提供するオープンデータやAPIに準拠しています。
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
           <a
             href="https://disaportal.gsi.go.jp/"
             target="_blank"
-            class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
+            class="p-2.5 rounded-xl bg-slate-950 hover:bg-slate-900 border border-slate-800/80 text-slate-300 transition flex flex-col gap-0.5"
           >
-            🌐 国交省 重ねるハザードマップ
+            <span class="font-bold text-cyan-400">国土交通省 重ねるハザードマップ</span>
+            <span class="text-slate-500 text-[10px]">洪水浸水想定区域 / 土砂災害警戒区域タイル</span>
+          </a>
+          <a
+            href="https://maps.gsi.go.jp/development/ichiran.html"
+            target="_blank"
+            class="p-2.5 rounded-xl bg-slate-950 hover:bg-slate-900 border border-slate-800/80 text-slate-300 transition flex flex-col gap-0.5"
+          >
+            <span class="font-bold text-cyan-400">国土地理院タイル</span>
+            <span class="text-slate-500 text-[10px]">標準地図 / 淡色地図 / 航空写真オルソ</span>
+          </a>
+          <a
+            href="https://www.jma.go.jp/bosai/risk/"
+            target="_blank"
+            class="p-2.5 rounded-xl bg-slate-950 hover:bg-slate-900 border border-slate-800/80 text-slate-300 transition flex flex-col gap-0.5"
+          >
+            <span class="font-bold text-purple-400">気象庁 キキクル（危険度分布）</span>
+            <span class="text-slate-500 text-[10px]">メッシュ分布仕様・危険度基準参考</span>
+          </a>
+          <a
+            href="https://www.openstreetmap.org/copyright"
+            target="_blank"
+            class="p-2.5 rounded-xl bg-slate-950 hover:bg-slate-900 border border-slate-800/80 text-slate-300 transition flex flex-col gap-0.5"
+          >
+            <span class="font-bold text-emerald-400">OpenStreetMap & ESRI</span>
+            <span class="text-slate-500 text-[10px]">&copy; OpenStreetMap contributors / Esri</span>
           </a>
         </div>
       </div>

@@ -5,16 +5,17 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: process.env.GITHUB_PAGES === 'true' ? '/JapanEvacuationMap/' : '/',
   plugins: [
     vue(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: '避難指示リアルタイムマップ化DX (EvacuationMap DX)',
-        short_name: 'EvacuationMap',
-        description: 'テキスト形式の避難指示文をLLMで即座に解析し、ハザードマップと突合して直感判定する防災PWA',
+        name: '避難情報マップ',
+        short_name: '避難情報マップ',
+        description: 'テキスト形式の避難指示文をLLMで即座に解析し、ハザードマップと突合して直感判定する防災PWAプロトタイプ',
         theme_color: '#020617',
         background_color: '#020617',
         display: 'standalone',

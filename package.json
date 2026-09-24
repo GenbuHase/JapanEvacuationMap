@@ -1,8 +1,30 @@
 {
   "name": "@genbuhase/japan-evacuation-map",
   "private": true,
-  "version": "0.1.0-beta.1",
+  "version": "0.1.1-beta",
   "type": "module",
+  "description": "自治体の文字避難指示を1秒で地図ポリゴンへ変換し、ハザード情報と突合する防災PWAプロトタイプ",
+  "homepage": "https://genbuhase.github.io/JapanEvacuationMap/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GenbuHase/JapanEvacuationMap.git"
+  },
+  "bugs": {
+    "url": "https://github.com/GenbuHase/JapanEvacuationMap/issues"
+  },
+  "keywords": [
+    "disaster-prevention",
+    "evacuation-map",
+    "hazard-map",
+    "kikikuru",
+    "pwa",
+    "vue3",
+    "leaflet",
+    "turfjs",
+    "gemini-api"
+  ],
+  "author": "Genbu Hase <14960841+GenbuHase@users.noreply.github.com>",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
