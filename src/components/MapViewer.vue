@@ -210,6 +210,20 @@ let hazardLayerGroup: L.LayerGroup | null = null;
 let mlitFloodLayer: L.TileLayer | null = null;
 let mlitSlopeLayer: L.TileLayer | null = null;
 let kikikuruLayerGroup: L.LayerGroup | null = null;
+let selectedHazardLayer: L.Path | null = null;
+let originalHazardStyle: any = null;
+
+function resetHazardHighlight() {
+  if (selectedHazardLayer && originalHazardStyle) {
+    try {
+      selectedHazardLayer.setStyle(originalHazardStyle);
+    } catch (err) {
+      console.warn('Failed to reset hazard style', err);
+    }
+    selectedHazardLayer = null;
+    originalHazardStyle = null;
+  }
+}
 
 const showLayerPanel = ref(false);
 const selectedBaseMapKey = ref<keyof typeof BASE_MAP_LAYERS>('esriDark');
@@ -297,6 +311,10 @@ function initMap() {
   // シナリオに応じたレイヤー状態を初期適用
   syncHazardLayersForScenario();
 
+  map.on('popupclose', () => {
+    resetHazardHighlight();
+  });
+
   initUserMarker();
   renderKikikuru();
   renderHazardPolygons();
@@ -375,12 +393,28 @@ function openUserPopup() {
 // 危険区域ベクターポリゴンを描画＆クリック時NERV吹き出しポップアップ提示
 function renderHazardPolygons() {
   if (map) map.closePopup();
+  resetHazardHighlight();
   if (!hazardLayerGroup || !props.hazardGeoJson) return;
   hazardLayerGroup.clearLayers();
 
   if (!layersVisible.hazardPolygons) return;
 
-  L.geoJSON(props.hazardGeoJson, {
+  // 広域メッシュ(kikikuru/isBroadMesh)は奥(下層)、具体的な個別警戒区域は手前(上層)にソート
+  const rawFeatures = props.hazardGeoJson.features || [];
+  const sortedFeatures = [...rawFeatures].sort((a: any, b: any) => {
+    const aIsBroad = a?.properties?.hazardType === 'kikikuru' || a?.properties?.isBroadMesh;
+    const bIsBroad = b?.properties?.hazardType === 'kikikuru' || b?.properties?.isBroadMesh;
+    if (aIsBroad && !bIsBroad) return -1;
+    if (!aIsBroad && bIsBroad) return 1;
+    return 0;
+  });
+
+  const geoJsonData = {
+    ...props.hazardGeoJson,
+    features: sortedFeatures
+  };
+
+  L.geoJSON(geoJsonData, {
     style: (feature) => {
       const dangerLevel = feature?.properties?.dangerLevel || 4;
       const hType = feature?.properties?.hazardType;
@@ -388,9 +422,6 @@ function renderHazardPolygons() {
       const isKikikuru = hType === 'kikikuru';
 
       // 内閣府 避難情報ガイドラインに基づく警戒レベル配色
-      // レベル5（緊急安全確保）: 黒（#000000）
-      // レベル4（避難指示）: 紫（#a855f7 / #7c3aed）
-      // レベル3（高齢者等避難）: 赤（#ef4444 / #dc2626）
       let levelColor = '#a855f7';
       let levelFill = '#7c3aed';
 
@@ -401,7 +432,6 @@ function renderHazardPolygons() {
         levelColor = '#ef4444';
         levelFill = '#dc2626';
       } else {
-        // レベル4（避難指示）
         levelColor = '#a855f7';
         levelFill = '#7c3aed';
       }
@@ -412,9 +442,9 @@ function renderHazardPolygons() {
 
       return {
         color: finalColor,
-        weight: isWardBoundary ? 2.2 : (isLandslide ? 2.5 : 3),
+        weight: isWardBoundary ? 2.2 : (isLandslide ? 2.8 : 3),
         fillColor: finalFill,
-        fillOpacity: isWardBoundary ? (feature?.properties?.fillOpacity || 0.08) : (isKikikuru ? 0.2 : (feature?.properties?.fillOpacity || 0.45)),
+        fillOpacity: isWardBoundary ? (feature?.properties?.fillOpacity || 0.08) : (isKikikuru ? 0.18 : (feature?.properties?.fillOpacity || 0.48)),
         dashArray: isWardBoundary ? '6, 6' : (isLandslide ? '5, 5' : undefined),
         className: isWardBoundary ? 'danger-polygon-ward-boundary' : (isLandslide ? 'danger-polygon-landslide' : 'danger-polygon-flood')
       };
@@ -437,7 +467,15 @@ function renderHazardPolygons() {
     },
     onEachFeature: (feature, layer) => {
       const p = feature.properties || {};
-      const isWardBoundary = p.isWardBoundary || (p.hazardType === 'flood');
+      const hType = p.hazardType;
+      const isLandslide = hType === 'landslide';
+      const isKikikuru = hType === 'kikikuru' || p.isBroadMesh;
+      const isWardBoundary = p.isWardBoundary || (!isLandslide && !isKikikuru && hType === 'flood');
+
+      // 広域メッシュは確実に最背面に配置
+      if (isKikikuru) {
+        (layer as any).bringToBack?.();
+      }
 
       // エリアまたは避難所押下（タップ/クリック）でNERV吹き出しポップアップを提示
       layer.on('click', (e: L.LeafletMouseEvent) => {
@@ -446,13 +484,18 @@ function renderHazardPolygons() {
 
         if (p.type === 'shelter') {
           const shelterPopupHtml = `
-            <div style="padding: 6px 12px; font-size: 12px; font-weight: bold; color: #fff; line-height: 1.35;">
-              <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
-                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
-                <span style="color: #34d399;">開設中避難所（安全施設）</span>
+            <div style="padding: 8px 12px; font-size: 12px; font-weight: bold; color: #fff; line-height: 1.35; min-width: 220px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px;">
+                <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                  <span>🏫</span> 開設中避難所（安全施設）
+                </span>
+                <span style="font-size: 10px; color: #10b981; font-family: monospace; font-weight: 800;">OPEN</span>
               </div>
-              <div style="font-size: 13px; font-weight: 900; color: #ffffff; margin-top: 3px;">${p.name}</div>
-              <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">電文抽出：避難可能施設</div>
+              <div style="font-size: 13.5px; font-weight: 900; color: #ffffff; letter-spacing: 0.02em;">${p.name}</div>
+              ${p.address ? `<div style="font-size: 10.5px; color: #94a3b8; margin-top: 3px; font-family: monospace;">${p.address}</div>` : ''}
+              <div style="font-size: 10px; color: #cbd5e1; margin-top: 5px; padding: 4px 6px; background: rgba(16, 185, 129, 0.1); border-radius: 4px;">
+                電文抽出：避難可能施設（収容目安: ${p.capacity || '約150〜300'}人）
+              </div>
             </div>
           `;
           L.popup({
@@ -466,23 +509,112 @@ function renderHazardPolygons() {
           return;
         }
 
-        const isLevel4 = (p.dangerLevel || 4) >= 4;
-        const statusLabel = isWardBoundary ? '警戒レベル4 避難指示対象区' : (isLevel4 ? '危険（避難指示）' : '警戒');
-        const dotColor = isLevel4 ? '#a855f7' : '#facc15';
+        // 既存のハイライトをリセット
+        resetHazardHighlight();
 
-        const popupHtml = `
-          <div style="padding: 6px 12px; font-size: 12px; font-weight: bold; color: #fff; line-height: 1.35;">
-            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
-              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${dotColor};"></span>
-              <span style="color: ${isLevel4 ? '#c084fc' : '#facc15'};">${statusLabel}</span>
+        const dangerLevel = p.dangerLevel || 4;
+        const isLevel4 = dangerLevel >= 4;
+
+        let popupHtml = '';
+
+        if (isKikikuru) {
+          // 【A. 広域気象警報メッシュをクリックした時の挙動】
+          popupHtml = `
+            <div style="padding: 8px 12px; font-size: 12px; line-height: 1.4; color: #fff; min-width: 250px; max-width: 310px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                <span style="background: rgba(168, 85, 247, 0.25); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.5); font-weight: 800; font-size: 10px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                  <span>🌐</span> 広域気象警報メッシュ
+                </span>
+                <span style="color: #c084fc; font-size: 10px; font-weight: 800; font-family: monospace;">Lv.4相当（極めて危険）</span>
+              </div>
+              <div style="font-size: 13px; font-weight: 900; color: #f8fafc; letter-spacing: 0.02em;">
+                ${p.name || '横浜地方気象台 土砂災害危険警報発表地域'}
+              </div>
+              <div style="font-size: 11px; color: #cbd5e1; margin-top: 4px;">
+                発表市町村：<strong style="color: #fbbf24;">横浜南部、鎌倉 全域</strong>
+              </div>
+              <div style="font-size: 10px; color: #94a3b8; margin-top: 4px; line-height: 1.35;">
+                ${p.categoryText || '横浜地方気象台 レベル4土砂災害危険警報発表地域'}
+              </div>
+              <div style="margin-top: 8px; padding: 6px 8px; background: rgba(245, 158, 11, 0.14); border-left: 3px solid #f59e0b; border-radius: 4px; font-size: 10.5px; color: #fef3c7; line-height: 1.4;">
+                📍 <strong>個別地域の詳細確認:</strong><br>
+                メッシュ内の<strong>橙色エリア（横浜南部／鎌倉）</strong>を直接タップすると、それぞれの急傾斜地警戒区域の詳細が表示されます。
+              </div>
             </div>
-            <div style="font-size: 12px; font-weight: 800; color: #f1f5f9; margin-top: 3px;">${p.name || '指定危険区域'}</div>
-            <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">
-              ${p.categoryText || '国交省ハザードマップ指定区域'}
+          `;
+        } else {
+          // 【B. 具体的な個別警戒地域（横浜南部・鎌倉等）をクリックした時の挙動】
+          // クリックされたポリゴンを白枠線でハイライト強調
+          if ((layer as any).setStyle) {
+            selectedHazardLayer = layer as L.Path;
+            originalHazardStyle = {
+              weight: (layer as any).options.weight,
+              color: (layer as any).options.color,
+              fillOpacity: (layer as any).options.fillOpacity
+            };
+            (layer as L.Path).setStyle({
+              weight: 3.5,
+              color: '#ffffff',
+              fillOpacity: Math.min(0.72, ((originalHazardStyle.fillOpacity as number) || 0.48) + 0.18)
+            });
+            (layer as any).bringToFront?.();
+          }
+
+          // 地区名の判別バッジ
+          let districtBadge = p.districtBadge || '';
+          if (!districtBadge) {
+            if (p.id?.includes('yokohama-south') || p.name?.includes('横浜市南部')) {
+              districtBadge = '横浜南部';
+            } else if (p.id?.includes('kamakura') || p.name?.includes('鎌倉')) {
+              districtBadge = '鎌倉';
+            } else if (p.id?.includes('yamate') || p.name?.includes('山手')) {
+              districtBadge = '中区山手';
+            } else if (p.id?.includes('motomachi') || p.name?.includes('元町')) {
+              districtBadge = '中区元町';
+            } else if (p.id?.includes('uchikoshi') || p.name?.includes('打越')) {
+              districtBadge = '中区打越';
+            } else if (p.id?.includes('negishi') || p.name?.includes('根岸')) {
+              districtBadge = '中区根岸';
+            } else if (p.id?.includes('atami') || p.name?.includes('熱海')) {
+              districtBadge = '熱海市';
+            } else if (p.id?.includes('ito') || p.name?.includes('伊東')) {
+              districtBadge = '伊東市';
+            } else {
+              districtBadge = isWardBoundary ? '浸水想定区' : '個別警戒区域';
+            }
+          }
+
+          const badgeBg = isLandslide ? '#f59e0b' : (isWardBoundary ? '#0ea5e9' : '#ef4444');
+          const badgeTextColor = isLandslide ? '#000000' : '#ffffff';
+          const levelText = dangerLevel === 3 ? '警戒レベル3 高齢者等避難' : (isLevel4 ? '警戒レベル4 避難指示' : '警戒情報');
+          const levelColor = dangerLevel === 3 ? '#fca5a5' : '#c084fc';
+
+          popupHtml = `
+            <div style="padding: 8px 12px; font-size: 12px; line-height: 1.4; color: #fff; min-width: 250px; max-width: 320px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                <span style="background: ${badgeBg}; color: ${badgeTextColor}; font-weight: 900; font-size: 11px; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.04em; box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);">
+                  📍 【${districtBadge}】個別指定区域
+                </span>
+                <span style="color: ${levelColor}; font-size: 10px; font-weight: 800; font-family: monospace;">
+                  ${levelText}
+                </span>
+              </div>
+              <div style="font-size: 13.5px; font-weight: 900; color: #ffffff; letter-spacing: 0.02em; line-height: 1.35;">
+                ${p.name || '指定危険区域'}
+              </div>
+              ${p.districtSubtitle ? `<div style="font-size: 11px; color: #93c5fd; margin-top: 3px; font-weight: bold;">対象地区：${p.districtSubtitle}</div>` : ''}
+              ${p.targetHills ? `<div style="font-size: 10.5px; color: #fde68a; margin-top: 2px;">⛰️ 対象山林・崖地：${p.targetHills}</div>` : ''}
+              <div style="font-size: 10.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.35;">
+                ${p.categoryText || '国交省ハザードマップ指定区域'}
+              </div>
+              ${isWardBoundary ? '<div style="font-size: 10px; color: #38bdf8; margin-top: 4px;">🌊 川沿いの着色エリア（黄色・ピンク・赤）にいる方は直ちに避難</div>' : ''}
+              <div style="margin-top: 8px; padding: 6px 8px; background: rgba(239, 68, 68, 0.16); border-left: 3px solid ${badgeBg}; border-radius: 4px; font-size: 10px; color: #fecaca; line-height: 1.35;">
+                ⚠️ <strong>避難・警戒行動:</strong><br>
+                ${p.recommendedAction || (isLandslide ? '急傾斜地・崖地から直ちに離隔し、頑丈な建物2階以上または避難所へ緊急避難' : '浸水想定低地からの離隔・垂直避難')}
+              </div>
             </div>
-            ${isWardBoundary ? '<div style="font-size: 10px; color: #38bdf8; margin-top: 3px;">🌊 川沿いの着色エリア（黄色・ピンク・赤）にいる方は直ちに避難</div>' : ''}
-          </div>
-        `;
+          `;
+        }
 
         L.popup({
           className: 'nerv-popup',

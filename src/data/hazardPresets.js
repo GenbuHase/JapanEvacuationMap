@@ -339,6 +339,40 @@ export const KIKIKURU_MESH_GEOJSON = {
 export const YOKOHAMA_SOUTH_KAMAKURA_LANDSLIDE_GEOJSON = {
   type: "FeatureCollection",
   features: [
+    // 1. 広域メッシュ（最背面に配置して個別地域のクリックを妨げない構造）
+    {
+      type: "Feature",
+      id: "kikikuru-south-purple-03",
+      properties: {
+        id: "kikikuru-south-purple",
+        name: "気象台キキクル土砂（極めて危険・紫メッシュ）",
+        hazardType: "kikikuru",
+        isBroadMesh: true,
+        districtName: "横浜南部・鎌倉 全域（広域メッシュ）",
+        districtBadge: "広域メッシュ",
+        districtSubtitle: "横浜地方気象台 発表区域",
+        categoryText: "横浜地方気象台 レベル4土砂災害危険警報発表地域",
+        dangerLevel: 4,
+        source: "横浜地方気象台 / 気象庁キキクル",
+        color: "#a855f7",
+        fillColor: "#7e22ce",
+        fillOpacity: 0.18,
+        recommendedAction: "広域メッシュ内の橙色エリア（横浜南部／鎌倉）をタップして個別の急傾斜地警戒区域を確認してください"
+      },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [139.5000, 35.4100],
+            [139.6600, 35.4100],
+            [139.6600, 35.2900],
+            [139.5000, 35.2900],
+            [139.5000, 35.4100]
+          ]
+        ]
+      }
+    },
+    // 2. 【横浜南部】土砂災害警戒区域（手前に配置）
     {
       type: "Feature",
       id: "landslide-yokohama-south-01",
@@ -346,12 +380,17 @@ export const YOKOHAMA_SOUTH_KAMAKURA_LANDSLIDE_GEOJSON = {
         id: "landslide-yokohama-south",
         name: "横浜市南部（港南区・磯子区・金沢区・栄区）土砂災害警戒区域",
         hazardType: "landslide",
+        districtName: "横浜市南部",
+        districtBadge: "横浜南部",
+        districtSubtitle: "港南区・磯子区・金沢区・栄区",
+        targetHills: "円海山・能見台・朝比奈丘陵",
         categoryText: "円海山・能見台・朝比奈丘陵 急傾斜地崩壊危険箇所（レベル4土砂災害危険警報）",
         dangerLevel: 4,
         source: "神奈川県土砂災害ポータル / 横浜市行政地図情報",
         color: "#f59e0b",
         fillColor: "#d97706",
-        fillOpacity: 0.45
+        fillOpacity: 0.5,
+        recommendedAction: "円海山・能見台・朝比奈丘陵などの急傾斜地・崖地から直ちに離隔し、安全な場所へ避難"
       },
       geometry: {
         type: "Polygon",
@@ -367,6 +406,7 @@ export const YOKOHAMA_SOUTH_KAMAKURA_LANDSLIDE_GEOJSON = {
         ]
       }
     },
+    // 3. 【鎌倉市】土砂災害特別警戒区域（手前に配置）
     {
       type: "Feature",
       id: "landslide-kamakura-02",
@@ -374,12 +414,17 @@ export const YOKOHAMA_SOUTH_KAMAKURA_LANDSLIDE_GEOJSON = {
         id: "landslide-kamakura",
         name: "鎌倉市（北鎌倉・大町・極楽寺・鎌倉アルプス周辺）土砂災害特別警戒区域",
         hazardType: "landslide",
+        districtName: "鎌倉市",
+        districtBadge: "鎌倉",
+        districtSubtitle: "北鎌倉・大町・極楽寺・鎌倉アルプス周辺",
+        targetHills: "鎌倉アルプス山沿い急傾斜地",
         categoryText: "鎌倉市山沿い急傾斜地崩壊特別警戒区域（レッドゾーン）",
         dangerLevel: 4,
         source: "神奈川県土砂災害ポータル / 鎌倉市防災情報",
         color: "#f59e0b",
         fillColor: "#d97706",
-        fillOpacity: 0.45
+        fillOpacity: 0.5,
+        recommendedAction: "鎌倉山沿いの急傾斜地崩壊特別警戒区域（レッドゾーン）から直ちに離隔し、指定避難所へ避難"
       },
       geometry: {
         type: "Polygon",
@@ -391,32 +436,6 @@ export const YOKOHAMA_SOUTH_KAMAKURA_LANDSLIDE_GEOJSON = {
             [139.5300, 35.3050],
             [139.5150, 35.3300],
             [139.5250, 35.3480]
-          ]
-        ]
-      }
-    },
-    {
-      type: "Feature",
-      id: "kikikuru-south-purple-03",
-      properties: {
-        id: "kikikuru-south-purple",
-        name: "気象台キキクル土砂（極めて危険・紫メッシュ）",
-        hazardType: "kikikuru",
-        categoryText: "横浜地方気象台 レベル4土砂災害危険警報発表地域",
-        dangerLevel: 4,
-        color: "#a855f7",
-        fillColor: "#7e22ce",
-        fillOpacity: 0.2
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [139.5000, 35.4100],
-            [139.6600, 35.4100],
-            [139.6600, 35.2900],
-            [139.5000, 35.2900],
-            [139.5000, 35.4100]
           ]
         ]
       }
