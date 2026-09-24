@@ -1,0 +1,104 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* カスタムアニメーション＆UIスタイル */
+@keyframes user-pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 16px rgba(56, 189, 248, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+  }
+}
+
+.user-pulse-marker {
+  width: 22px;
+  height: 22px;
+  background: #38bdf8;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  animation: user-pulse 2s infinite;
+}
+
+@keyframes danger-pulse {
+  0%, 100% {
+    fill-opacity: 0.55;
+    stroke-opacity: 1;
+    stroke-width: 3.5;
+  }
+  50% {
+    fill-opacity: 0.25;
+    stroke-opacity: 0.6;
+    stroke-width: 2;
+  }
+}
+
+.danger-polygon-flood {
+  animation: danger-pulse 2.2s infinite ease-in-out;
+}
+
+.danger-polygon-river {
+  animation: danger-pulse 2.5s infinite ease-in-out;
+}
+
+.danger-polygon-landslide {
+  animation: danger-pulse 3s infinite ease-in-out;
+}
+
+/* スクロールバー装飾 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Leaflet ポップアップやコントロールのダークテーマ調整 */
+.leaflet-container {
+  font-family: inherit;
+  background-color: #020617;
+}
+
+/* NERV風 ポップアップ・吹き出しスタイル */
+.leaflet-popup.nerv-popup .leaflet-popup-content-wrapper {
+  background: #111111;
+  color: #ffffff;
+  border: 1px solid #333333;
+  border-radius: 6px;
+  padding: 0;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.leaflet-popup.nerv-popup .leaflet-popup-content {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.leaflet-popup.nerv-popup .leaflet-popup-tip {
+  background: #111111;
+  border-bottom: 1px solid #333333;
+  border-right: 1px solid #333333;
+  box-shadow: none;
+}
+
+.leaflet-popup.nerv-popup a.leaflet-popup-close-button {
+  color: #888888;
+  padding: 4px 6px;
+}
+.leaflet-popup.nerv-popup a.leaflet-popup-close-button:hover {
+  color: #ffffff;
+}

@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>避難指示リアルタイムマップ化DX (EvacuationMap DX) - プロトタイプ</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Turf.js for Geo analysis -->
+    <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: #0b0f19;
+            color: #f1f5f9;
+        }
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Pulse Animation for Current Location */
+        @keyframes user-pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 14px rgba(56, 189, 248, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+        }
+        .user-pulse-marker {
+            width: 22px;
+            height: 22px;
+            background: #38bdf8;
+            border: 3px solid #ffffff;
+            border-radius: 50%;
+            animation: user-pulse 2s infinite;
+        }
+        /* Danger Zone Blink */
+        @keyframes danger-blink {
+            0%, 100% { fill-opacity: 0.45; stroke-opacity: 0.9; }
+            50% { fill-opacity: 0.20; stroke-opacity: 0.5; }
+        }
+        .danger-polygon {
+            animation: danger-blink 2.5s infinite;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden bg-slate-950 text-slate-100">
+
+    <!-- Top Navigation Header -->
+    <header class="h-14 bg-slate-900/90 border-b border-slate-800 px-6 flex items-center justify-between z-30 backdrop-blur-md">
+        <div class="flex items-center gap-3">
+            <span class="p-2 bg-gradient-to-br from-rose-500 to-amber-500 rounded-lg text-white font-bold text-sm shadow-lg shadow-rose-500/20">DX</span>
+            <div>
+                <h1 class="font-bold text-base tracking-wide flex items-center gap-2">
+                    避難指示リアルタイムマップ化DX
+                    <span class="text-xs bg-sky-500/20 text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded-full font-mono font-medium">PoC Prototype v1.0</span>
+                </h1>
+            </div>
+        </div>
+        <div class="flex items-center gap-4 text-xs font-mono">
+            <div class="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-slate-300">GPS測位: 横浜市中区山下町 (中華街)</span>
+                <span class="text-slate-500">|</span>
+                <span class="text-sky-400">標高: 2.3m</span>
+            </div>
+            <a href="../slides_slate/slide_deck.html" target="_blank" class="bg-indigo-600/80 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-full transition flex items-center gap-1 font-sans">
+                <span>📑 防災スライドへ</span>
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Left Sidebar: Text Ingestion & LLM Parsing -->
+        <aside class="w-[480px] bg-slate-900 border-r border-slate-800 flex flex-col z-20 shadow-2xl">
+            <!-- Sidebar Header -->
+            <div class="p-4 border-b border-slate-800 bg-slate-900/50">
+                <div class="text-xs font-semibold text-sky-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <span>⚡ INGESTION & LLM PARSER</span>
+                </div>
+                <div class="text-sm font-bold text-slate-200">
+                    自治体速報テキストから空間ポリゴンへ
+                </div>
+                <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                    エリアメールやLアラートの自然言語から、対象自治体・町丁・ハザード種別をLLMが瞬時に抽出し、国交省APIポリゴンと突合します。
+                </p>
+            </div>
+
+            <!-- Scenario Preset Buttons -->
+            <div class="p-4 border-b border-slate-800 bg-slate-950/40">
+                <div class="text-xs text-slate-400 mb-2 font-medium">台風25号実録シナリオを選択:</div>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="loadScenario('landslide')" id="btn-landslide" class="text-left p-2.5 rounded-lg border border-slate-700 bg-slate-800/70 hover:bg-slate-700/70 transition flex items-start gap-2.5">
+                        <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">12:32</span>
+                        <div class="text-xs">
+                            <div class="font-bold text-slate-200">中区 土砂災害避難指示（山手町・元町崖地）</div>
+                            <div class="text-slate-400 text-[11px] mt-0.5">平地中華街での食事中。背後の急傾斜地警戒区域を検知</div>
+                        </div>
+                    </button>
+                    <button onclick="loadScenario('flood')" id="btn-flood" class="text-left p-2.5 rounded-lg border border-rose-500/50 bg-rose-950/30 hover:bg-rose-900/40 transition flex items-start gap-2.5">
+                        <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 shrink-0">14:23</span>
+                        <div class="text-xs">
+                            <div class="font-bold text-rose-200">中区 内水氾濫避難指示（浸水想定50cm以上）</div>
+                            <div class="text-rose-400 text-[11px] mt-0.5">時間雨量52mm・下水満管による冠水直撃。現在地を包囲</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Text Input Area -->
+            <div class="p-4 flex-1 flex flex-col overflow-y-auto gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5 flex justify-between items-center">
+                        <span>受信速報テキスト（自由編集・貼付可）</span>
+                        <span class="text-[11px] text-slate-500 font-mono" id="char-count">0文字</span>
+                    </label>
+                    <textarea id="raw-text" class="w-full h-28 bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-sky-500 transition leading-relaxed resize-none font-mono"></textarea>
+                    <button onclick="runParsing()" id="btn-parse" class="mt-2 w-full py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold text-xs rounded-lg shadow-lg shadow-sky-500/25 transition flex items-center justify-center gap-2">
+                        <span id="parse-spinner" class="hidden animate-spin">🔄</span>
+                        <span id="parse-btn-text">LLM構造化解析 ＆ マップ展開を実行</span>
+                    </button>
+                </div>
+
+                <!-- Structured JSON Card -->
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 flex flex-col">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[11px] font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1">
+                            <span>🤖 LLM構造化抽出結果</span>
+                        </span>
+                        <span id="parse-status-badge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PARSED</span>
+                    </div>
+                    <div id="parsed-summary" class="text-xs space-y-1.5 text-slate-300">
+                        <div class="flex justify-between border-b border-slate-800/80 pb-1">
+                            <span class="text-slate-400">対象自治体:</span>
+                            <span class="font-bold text-slate-200" id="res-authority">-</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-800/80 pb-1">
+                            <span class="text-slate-400">警戒レベル:</span>
+                            <span class="font-bold" id="res-level">-</span>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-800/80 pb-1">
+                            <span class="text-slate-400">災害種別:</span>
+                            <span class="font-bold" id="res-disaster">-</span>
+                        </div>
+                        <div class="border-b border-slate-800/80 pb-1">
+                            <span class="text-slate-400">対象地区:</span>
+                            <div class="font-mono text-[11px] text-sky-300 mt-0.5" id="res-districts">-</div>
+                        </div>
+                        <div>
+                            <span class="text-slate-400">推奨アクション:</span>
+                            <div class="text-[11px] font-bold text-amber-300 mt-0.5" id="res-action">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Technical Note -->
+                <div class="text-[11px] text-slate-400 bg-slate-950/60 p-3 rounded-lg border border-slate-800 leading-relaxed">
+                    <strong class="text-slate-300">💡 防災DXの核心:</strong> 自治体の既存メールシステムに改修を一切求めず、住民側アプリが既存テキストから逆引きで国交省オープンデータ（地理院タイル/国土数値情報）を叩くため、即日実戦配備が可能です。
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right: Map View & Real-time HUD -->
+        <main class="flex-1 relative bg-slate-950">
+            <!-- Leaflet Map Container -->
+            <div id="map" class="w-full h-full"></div>
+
+            <!-- Floating Top HUD: Alert Status -->
+            <div class="absolute top-4 left-6 right-6 z-20 pointer-events-none flex justify-center">
+                <div id="alert-banner" class="pointer-events-auto max-w-2xl w-full bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl p-4 shadow-2xl transition-all duration-300">
+                    <div class="flex items-start gap-3.5">
+                        <div id="banner-icon-bg" class="p-3 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 text-2xl shrink-0">
+                            🚨
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span id="banner-badge" class="px-2 py-0.5 rounded text-[11px] font-black uppercase tracking-wider bg-rose-500 text-white">
+                                    直ちに垂直退避
+                                </span>
+                                <span class="text-xs text-slate-400 font-mono" id="banner-timestamp">
+                                    2026/09/21 14:23 発令
+                                </span>
+                            </div>
+                            <h2 id="banner-title" class="text-base font-extrabold text-white leading-snug">
+                                現在地は【避難指示対象エリア（浸水想定区域）】の直撃を受けています！
+                            </h2>
+                            <p id="banner-desc" class="text-xs text-slate-300 mt-1 leading-relaxed">
+                                アメダス横浜で時間降雨52.0mmを観測。下水管渠が満管となり路面冠水が急速に拡大中。屋外への移動は自殺行為です。直ちに強固な建物の2階以上へ垂直退避してください。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map Controls & Legend (Bottom Left) -->
+            <div class="absolute bottom-6 left-6 z-20 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-xl max-w-xs text-xs text-slate-300">
+                <div class="font-bold text-slate-200 mb-2 flex items-center justify-between">
+                    <span>凡例 ＆ レイヤー</span>
+                    <span class="text-[10px] text-slate-500">国交省オープンデータ</span>
+                </div>
+                <div class="space-y-1.5 text-[11px]">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3.5 h-3.5 rounded bg-sky-400 border-2 border-white inline-block"></span>
+                        <span>現在地（中華街・王府井酒家）</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3.5 h-3.5 rounded bg-rose-500/60 border border-rose-500 inline-block"></span>
+                        <span>中区低地 浸水想定区域（深さ0.5〜1.0m）</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3.5 h-3.5 rounded bg-amber-500/60 border border-amber-500 inline-block"></span>
+                        <span>山手町・元町 急傾斜地崩壊危険箇所（崖地）</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3.5 h-3.5 rounded bg-purple-600/40 border border-purple-500 inline-block"></span>
+                        <span>キキクル 危険（紫）メッシュ（14:10実況）</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Right: Lat/Lng & Action Shortcuts -->
+            <div class="absolute bottom-6 right-6 z-20 flex gap-2">
+                <button onclick="map.flyTo([35.4428, 139.6453], 16, {duration: 1.2})" class="bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700 px-3 py-2 rounded-xl text-xs font-medium shadow-lg backdrop-blur-md transition flex items-center gap-1.5">
+                    <span>🎯 現在地にフォーカス</span>
+                </button>
+                <button onclick="toggleDangerLayer()" id="btn-toggle-layer" class="bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700 px-3 py-2 rounded-xl text-xs font-medium shadow-lg backdrop-blur-md transition flex items-center gap-1.5">
+                    <span>👁️ 避難ポリゴン表示切替</span>
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // User Current Location: Yokohama Chinatown (Wangfujing Shuka)
+        const USER_LAT = 35.4428;
+        const USER_LNG = 139.6453;
+
+        // Initialize Leaflet Map (Dark Basemap)
+        const map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([USER_LAT, USER_LNG], 15);
+
+        // Add CartoDB Dark Matter tiles
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            subdomains: 'abcd'
+        }).addTo(map);
+
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
+        // Current Location Marker with custom CSS pulse
+        const userIcon = L.divIcon({
+            className: 'user-pulse-container',
+            html: '<div class="user-pulse-marker" title="あなたの現在地 (中華街・標高2.3m)"></div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+        });
+
+        const userMarker = L.marker([USER_LAT, USER_LNG], { icon: userIcon }).addTo(map);
+        userMarker.bindPopup(`
+            <div style="color: #0f172a; font-family: sans-serif; font-size: 12px; line-height: 1.4;">
+                <strong style="font-size: 13px; color: #0284c7;">📍 あなたの現在地</strong><br>
+                神奈川県横浜市中区山下町（中華街・王府井酒家）<br>
+                標高: <strong>2.3m</strong>（平地・海岸低地帯）<br>
+                <span style="color: #dc2626; font-weight: bold;">直近リスク: 道路冠水・内水氾濫</span>
+            </div>
+        `);
+
+        // Polygon Data Definitions
+        // 1. Landslide Risk Zone (Yamate-cho bluffs - steep slope hazard zone)
+        const landslideBluffCoords = [
+            [35.4402, 139.6465],
+            [35.4385, 139.6490],
+            [35.4360, 139.6520],
+            [35.4340, 139.6550],
+            [35.4325, 139.6530],
+            [35.4350, 139.6480],
+            [35.4375, 139.6440],
+            [35.4395, 139.6435]
+        ];
+
+        // 2. Flood / Inundation Zone (Naka Ward Lowland: Chinatown, Motomachi, Yamashita-cho)
+        const floodLowlandCoords = [
+            [35.4470, 139.6420],
+            [35.4485, 139.6480],
+            [35.4450, 139.6550],
+            [35.4400, 139.6530],
+            [35.4390, 139.6480],
+            [35.4410, 139.6410],
+            [35.4445, 139.6390]
+        ];
+
+        // 3. Kikikuru Purple Mesh Simulation (1km grid over Yokohama center)
+        const kikikuruPurpleMeshCoords = [
+            [35.4520, 139.6300],
+            [35.4520, 139.6600],
+            [35.4300, 139.6600],
+            [35.4300, 139.6300]
+        ];
+
+        let activeLayerGroup = L.layerGroup().addTo(map);
+
+        // Scenarios Database
+        const scenarios = {
+            landslide: {
+                time: "2026/09/21 12:32",
+                rawText: "【緊急速報・避難指示（警戒レベル4）】\nこちらは横浜市です。12時32分、中区の土砂災害警戒区域等（山手町・元町・石川町・北方町等の急傾斜地近傍）を対象に警戒レベル4避難指示を発令しました。土壌雨量指数の急上昇により斜面崩壊の危険が極めて高まっています。崖や急傾斜地から離れ、安全な避難所または建物の山側と反対側の2階以上へ退避してください。",
+                parsed: {
+                    authority: "神奈川県横浜市中区",
+                    level: "警戒レベル4（避難指示）",
+                    levelColor: "text-amber-400",
+                    disaster: "土砂災害（急傾斜地崩壊）",
+                    disasterColor: "text-amber-400",
+                    districts: "山手町、元町、石川町、北方町等の崖地近傍",
+                    action: "崖・急斜面からの即時離隔、山と反対側2階への退避"
+                },
+                hud: {
+                    badge: "近接警戒（背後250m崖地）",
+                    badgeClass: "bg-amber-500 text-slate-950 font-black",
+                    iconBgClass: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
+                    icon: "⚠️",
+                    title: "現在地は平地ですが、背後約250mの山手町台地が【避難指示対象】です！",
+                    desc: "現在地（中華街・標高2.3m）は直接の崖地ではありませんが、南東側に標高35mの急傾斜地崩壊危険区域（山手町）が迫っています。土石流や斜面崩壊に伴う土砂流入、道路寸断に警戒し、山側へ近づかないでください。"
+                },
+                renderZones: (lg) => {
+                    const landslidePoly = L.polygon(landslideBluffCoords, {
+                        color: '#f59e0b',
+                        weight: 2.5,
+                        fillColor: '#d97706',
+                        fillOpacity: 0.4,
+                        dashArray: '4, 4'
+                    }).addTo(lg);
+                    landslidePoly.bindTooltip("⚠️ 土砂災害警戒区域（山手町台地）- 避難指示対象", { permanent: true, direction: "center", className: "bg-amber-950/80 text-amber-200 border border-amber-600 px-2 py-1 text-xs rounded" });
+
+                    // Distance line from user to bluff
+                    const distLine = L.polyline([[USER_LAT, USER_LNG], [35.4402, 139.6465]], {
+                        color: '#38bdf8',
+                        weight: 2,
+                        dashArray: '6, 6'
+                    }).addTo(lg);
+                    distLine.bindTooltip("離隔 約250m", { permanent: true, direction: "right", className: "bg-slate-900 text-sky-300 text-[10px] px-1.5 py-0.5 rounded" });
+                }
+            },
+            flood: {
+                time: "2026/09/21 14:23",
+                rawText: "【緊急速報・避難指示（警戒レベル4）】\nこちらは横浜市です。14時23分、中区全域の浸水想定区域（浸水深0.5m以上）および山下町・元町周辺の低地を対象に警戒レベル4避難指示を発令しました。時間降雨52mmの大雨により下水処理能力を超過し、道路冠水が急速に拡大しています。屋外での避難移動は極めて危険です。直ちに強固な建物の2階以上へ垂直避難してください。",
+                parsed: {
+                    authority: "神奈川県横浜市中区",
+                    level: "警戒レベル4（避難指示）",
+                    levelColor: "text-rose-400",
+                    disaster: "内水氾濫・都市浸水（呑口破綻）",
+                    disasterColor: "text-rose-400",
+                    districts: "山下町（中華街含む）、元町、本牧等の中区低地帯",
+                    action: "屋外移動の即時中止、強固な建物の2階以上へ垂直退避"
+                },
+                hud: {
+                    badge: "直ちに垂直退避（直撃）",
+                    badgeClass: "bg-rose-600 text-white font-black",
+                    iconBgClass: "bg-rose-500/20 text-rose-400 border border-rose-500/30",
+                    icon: "🚨",
+                    title: "あなたの現在地は【避難指示対象エリア（浸水想定区域）】の直撃を受けています！",
+                    desc: "アメダス横浜で時間降雨52.0mm（瞬間換算66mm/h）を観測。下水管渠が満管となり路面冠水が急速に拡大中。屋外への移動は自殺行為です。直ちに中華街店舗など強固な建物の2階以上へ垂直退避してください。"
+                },
+                renderZones: (lg) => {
+                    // Flood Zone Polygon
+                    const floodPoly = L.polygon(floodLowlandCoords, {
+                        color: '#f43f5e',
+                        weight: 3,
+                        fillColor: '#e11d48',
+                        fillOpacity: 0.45,
+                        className: 'danger-polygon'
+                    }).addTo(lg);
+                    floodPoly.bindTooltip("🚨 浸水想定区域（浸水深0.5〜1.0m）- 避難指示対象エリア直撃", { permanent: true, direction: "center", className: "bg-rose-950/90 text-rose-200 border border-rose-600 font-bold px-2 py-1 text-xs rounded" });
+
+                    // Also show Kikikuru Purple background mesh
+                    L.polygon(kikikuruPurpleMeshCoords, {
+                        color: '#a855f7',
+                        weight: 1.5,
+                        fillColor: '#7e22ce',
+                        fillOpacity: 0.15,
+                        dashArray: '5, 5'
+                    }).addTo(lg).bindTooltip("キキクル浸水 危険メッシュ（紫・レベル4相当）", { opacity: 0.7, className: "bg-purple-950/80 text-purple-200 text-[10px]" });
+                }
+            }
+        };
+
+        let currentScenarioKey = 'flood';
+
+        function loadScenario(key) {
+            currentScenarioKey = key;
+            const sc = scenarios[key];
+            document.getElementById('raw-text').value = sc.rawText;
+            document.getElementById('char-count').innerText = `${sc.rawText.length}文字`;
+
+            // Button highlights
+            if (key === 'landslide') {
+                document.getElementById('btn-landslide').classList.add('border-amber-500/80', 'bg-amber-950/30');
+                document.getElementById('btn-flood').classList.remove('border-rose-500/80', 'bg-rose-950/30');
+            } else {
+                document.getElementById('btn-flood').classList.add('border-rose-500/80', 'bg-rose-950/30');
+                document.getElementById('btn-landslide').classList.remove('border-amber-500/80', 'bg-amber-950/30');
+            }
+
+            renderScenario(sc);
+        }
+
+        function renderScenario(sc) {
+            // Update JSON results
+            document.getElementById('res-authority').innerText = sc.parsed.authority;
+            document.getElementById('res-level').innerText = sc.parsed.level;
+            document.getElementById('res-level').className = `font-bold ${sc.parsed.levelColor}`;
+            document.getElementById('res-disaster').innerText = sc.parsed.disaster;
+            document.getElementById('res-disaster').className = `font-bold ${sc.parsed.disasterColor}`;
+            document.getElementById('res-districts').innerText = sc.parsed.districts;
+            document.getElementById('res-action').innerText = sc.parsed.action;
+
+            // Update HUD Banner
+            document.getElementById('banner-badge').className = `px-2 py-0.5 rounded text-[11px] uppercase tracking-wider ${sc.hud.badgeClass}`;
+            document.getElementById('banner-badge').innerText = sc.hud.badge;
+            document.getElementById('banner-timestamp').innerText = `${sc.time} 発令`;
+            document.getElementById('banner-title').innerText = sc.hud.title;
+            document.getElementById('banner-desc').innerText = sc.hud.desc;
+            document.getElementById('banner-icon-bg').innerText = sc.hud.icon;
+            document.getElementById('banner-icon-bg').className = `p-3 rounded-xl text-2xl shrink-0 ${sc.hud.iconBgClass}`;
+
+            // Re-render polygons
+            activeLayerGroup.clearLayers();
+            sc.renderZones(activeLayerGroup);
+        }
+
+        function runParsing() {
+            const btnText = document.getElementById('parse-btn-text');
+            const spinner = document.getElementById('parse-spinner');
+            const statusBadge = document.getElementById('parse-status-badge');
+
+            btnText.innerText = "LLM解析中 (Gemini Flash)...";
+            spinner.classList.remove('hidden');
+            statusBadge.innerText = "PROCESSING";
+            statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-mono bg-sky-500/20 text-sky-300 border border-sky-500/30 animate-pulse";
+
+            setTimeout(() => {
+                btnText.innerText = "LLM構造化解析 ＆ マップ展開を実行";
+                spinner.classList.add('hidden');
+                statusBadge.innerText = "PARSED & MAPPED";
+                statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+
+                const text = document.getElementById('raw-text').value;
+                if (text.includes("土砂") || text.includes("急傾斜")) {
+                    loadScenario('landslide');
+                } else {
+                    loadScenario('flood');
+                }
+            }, 600);
+        }
+
+        let layersVisible = true;
+        function toggleDangerLayer() {
+            layersVisible = !layersVisible;
+            if (layersVisible) {
+                map.addLayer(activeLayerGroup);
+                document.getElementById('btn-toggle-layer').classList.remove('opacity-50');
+            } else {
+                map.removeLayer(activeLayerGroup);
+                document.getElementById('btn-toggle-layer').classList.add('opacity-50');
+            }
+        }
+
+        // Initialize default scenario
+        loadScenario('flood');
+    </script>
+</body>
+</html>
