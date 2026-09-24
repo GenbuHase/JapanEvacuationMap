@@ -1,7 +1,7 @@
 {
   "name": "@genbuhase/japan-evacuation-map",
   "private": true,
-  "version": "0.1.2-beta",
+  "version": "0.1.3-beta",
   "type": "module",
   "description": "自治体の文字避難指示を1秒で地図ポリゴンへ変換し、ハザード情報と突合する防災PWAプロトタイプ",
   "homepage": "https://genbuhase.github.io/JapanEvacuationMap/",

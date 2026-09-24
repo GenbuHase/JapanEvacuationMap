@@ -302,77 +302,20 @@ export const RIVER_FLOOD_HAZARD_GEOJSON = {
   ]
 }
 
-// 4. 気象庁キキクル浸水 1kmメッシュ危険度分布シミュレーション
-export const KIKIKURU_MESH_GEOJSON = {
-  type: "FeatureCollection",
-  features: [
-    {
-      type: "Feature",
-      id: "kikikuru-purple-01",
-      properties: {
-        id: "kikikuru-purple",
-        name: "キキクル浸水害 危険度メッシュ（危険・紫）",
-        hazardType: "kikikuru",
-        categoryText: "気象庁キキクル レベル4相当（極めて危険）14:10実況",
-        dangerLevel: 4,
-        color: "#a855f7",
-        fillColor: "#7e22ce",
-        fillOpacity: 0.18
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [139.6300, 35.4520],
-            [139.6600, 35.4520],
-            [139.6600, 35.4300],
-            [139.6300, 35.4300],
-            [139.6300, 35.4520]
-          ]
-        ]
-      }
-    }
-  ]
-}
+// 4. 気象庁キキクル危険度分布 1km地域メッシュ（JIS X 0410 3次メッシュ厳密準拠・実況再現）
+// 実演・比較検証用（案B: 参考レイヤー・判定対象外）
+export {
+  KIKIKURU_SCENARIO_MESHES,
+  KIKIKURU_MESH_GEOJSON,
+  getKikikuruMeshForScenario
+} from './kikikuruMeshes.js';
 
 // 5. 【電文1】横浜地方気象台 土砂災害危険警報（横浜南部、鎌倉）ベクターポリゴン
+// ※純粋な避難指示・警戒区域のみで構成（広域キキクルメッシュは参考レイヤーへ分離）
 export const YOKOHAMA_SOUTH_KAMAKURA_LANDSLIDE_GEOJSON = {
   type: "FeatureCollection",
   features: [
-    // 1. 広域メッシュ（最背面に配置して個別地域のクリックを妨げない構造）
-    {
-      type: "Feature",
-      id: "kikikuru-south-purple-03",
-      properties: {
-        id: "kikikuru-south-purple",
-        name: "気象台キキクル土砂（極めて危険・紫メッシュ）",
-        hazardType: "kikikuru",
-        isBroadMesh: true,
-        districtName: "横浜南部・鎌倉 全域（広域メッシュ）",
-        districtBadge: "広域メッシュ",
-        districtSubtitle: "横浜地方気象台 発表区域",
-        categoryText: "横浜地方気象台 レベル4土砂災害危険警報発表地域",
-        dangerLevel: 4,
-        source: "横浜地方気象台 / 気象庁キキクル",
-        color: "#a855f7",
-        fillColor: "#7e22ce",
-        fillOpacity: 0.18,
-        recommendedAction: "広域メッシュ内の橙色エリア（横浜南部／鎌倉）をタップして個別の急傾斜地警戒区域を確認してください"
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [139.5000, 35.4100],
-            [139.6600, 35.4100],
-            [139.6600, 35.2900],
-            [139.5000, 35.2900],
-            [139.5000, 35.4100]
-          ]
-        ]
-      }
-    },
-    // 2. 【横浜南部】土砂災害警戒区域（手前に配置）
+    // 1. 【横浜南部】土砂災害警戒区域（手前に配置）
     {
       type: "Feature",
       id: "landslide-yokohama-south-01",

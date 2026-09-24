@@ -51,6 +51,35 @@
       </div>
     </transition>
 
+    <!-- 気象庁キキクル実演比較中バナー（タップでOFF） -->
+    <transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0 -translate-y-2"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="layersVisible.kikikuruMesh"
+        class="absolute top-16 left-1/2 -translate-x-1/2 z-20 backdrop-blur-md border rounded-full px-3 py-1 shadow-2xl text-[11px] pointer-events-auto flex items-center gap-2 max-w-[92vw]"
+        :class="kikikuruStatusInfo.hasData ? 'bg-purple-950/90 border-purple-500/80 text-purple-200' : 'bg-slate-900/90 border-slate-700 text-slate-300'"
+      >
+        <span
+          class="inline-block w-2 h-2 rounded-full flex-shrink-0"
+          :class="kikikuruStatusInfo.hasData ? 'bg-purple-400 animate-ping' : 'bg-slate-500'"
+        ></span>
+        <span class="font-bold truncate">{{ kikikuruStatusInfo.label }}</span>
+        <button
+          @click="layersVisible.kikikuruMesh = false; toggleKikikuruLayer()"
+          class="ml-1 text-slate-400 hover:text-white text-xs px-1 rounded hover:bg-white/10 flex-shrink-0"
+          title="キキクル表示を消す"
+        >
+          ✕
+        </button>
+      </div>
+    </transition>
+
     <!-- レイヤー切替＆凡例ドロワー（右下） -->
     <div
       v-if="showLayerPanel"
@@ -115,13 +144,18 @@
             <span>避難指示対象エリア（危険区域）</span>
           </span>
         </label>
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" v-model="layersVisible.kikikuruMesh" @change="toggleKikikuruLayer" class="rounded bg-neutral-800 border-neutral-600 text-purple-500 focus:ring-0" />
-          <span class="flex items-center gap-1.5">
-            <span class="w-3 h-3 rounded bg-purple-600/50 border border-purple-400 inline-block"></span>
-            <span>キキクル 危険度分布メッシュ（紫）</span>
-          </span>
-        </label>
+        <div class="space-y-1">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" v-model="layersVisible.kikikuruMesh" @change="toggleKikikuruLayer" class="rounded bg-neutral-800 border-neutral-600 text-purple-500 focus:ring-0" />
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded bg-purple-600/50 border border-purple-400 inline-block"></span>
+              <span class="text-xs font-bold text-purple-200">気象庁キキクル危険度（参考・実演比較）</span>
+            </span>
+          </label>
+          <div class="text-[10px] text-slate-400 pl-5 leading-tight">
+            ※実録スクショが存在する12:32土砂・14:23浸水のみ1マス単位で厳密再現。他の時間帯は客観的証拠に乏しいため非表示です。
+          </div>
+        </div>
 
       </div>
 
@@ -173,7 +207,7 @@ import {
   FLOOD_DEPTH_LEGEND,
   type SpatialAnalysisResult
 } from '../services/geoService';
-import { KIKIKURU_MESH_GEOJSON } from '../data/hazardPresets';
+import { getKikikuruMeshForScenario } from '../data/hazardPresets';
 
 const props = withDefaults(
   defineProps<{
@@ -232,7 +266,7 @@ const layersVisible = reactive({
   mlitFlood: true,
   mlitSlope: false,
   hazardPolygons: true,
-  kikikuruMesh: true
+  kikikuruMesh: false // 案B: 実演比較用の参考レイヤーとして初期値OFF
 });
 
 // 現在のシナリオやタブが洪水に関連しているかの判定
@@ -240,6 +274,30 @@ const isFloodActive = computed(() => {
   const p = props.currentPresetId || '';
   const t = props.activeHazardTab || '';
   return p.includes('flood') || t === 'flood' || t === 'river' || p === 'typhoon25_all_combined';
+});
+
+// キキクル比較バナーの表示情報（12:32と14:23の実録スクショ厳密連動）
+const kikikuruStatusInfo = computed(() => {
+  const p = props.currentPresetId || '';
+  if (p === 'typhoon25_1232_yamate') {
+    return {
+      hasData: true,
+      label: '📡 実録スクショ完全一致：キキクル土砂（12:40実況・169セル重畳中）',
+      hint: 'スクショの通り、山手崖地＝赤、平地中華街＝黄、戸塚栄＝紫を完全再現'
+    };
+  }
+  if (p === 'typhoon25_1423_flood_5wards') {
+    return {
+      hasData: true,
+      label: '📡 実録スクショ完全一致：キキクル浸水（14:10実況・133セル重畳中）',
+      hint: 'スクショの通り、低地＝紫直撃、周囲＝赤を完全再現'
+    };
+  }
+  return {
+    hasData: false,
+    label: '📡 当時スクショなし（推測を排して非表示中）',
+    hint: '客観的証拠スクショが残る12:32土砂・14:23浸水で比較可能です'
+  };
 });
 
 // シナリオに応じたMLITハザードレイヤーの自動最適化連動
@@ -288,8 +346,23 @@ function initMap() {
     hazardPane.style.pointerEvents = 'none';
   }
 
+  // 避難指示対象エリア（危険区域ベクターポリゴン）専用ペイン (zIndex 350: 国交省タイルの上、キキクルの下)
+  map.createPane('hazardVectorPane');
+  const hazardVectorPane = map.getPane('hazardVectorPane');
+  if (hazardVectorPane) {
+    hazardVectorPane.style.zIndex = '350';
+  }
+
+  // キキクル1kmメッシュ専用ペイン (zIndex 450: 避難指示想定区の上・最前面。表示ON時にメッシュを直接タップ可能)
+  map.createPane('kikikuruPane');
+  const kikikuruPane = map.getPane('kikikuruPane');
+  if (kikikuruPane) {
+    kikikuruPane.style.zIndex = '450';
+  }
+
   updateBaseMap();
 
+  // レイヤーグループ追加順序: 避難指示想定区を下層、キキクルを上層（前面）に配置
   hazardLayerGroup = L.layerGroup().addTo(map);
   kikikuruLayerGroup = L.layerGroup().addTo(map);
 
@@ -415,6 +488,7 @@ function renderHazardPolygons() {
   };
 
   L.geoJSON(geoJsonData, {
+    pane: 'hazardVectorPane',
     style: (feature) => {
       const dangerLevel = feature?.properties?.dangerLevel || 4;
       const hType = feature?.properties?.hazardType;
@@ -635,27 +709,90 @@ function renderKikikuru() {
 
   if (!layersVisible.kikikuruMesh) return;
 
-  L.geoJSON(KIKIKURU_MESH_GEOJSON as any, {
-    style: {
-      color: '#a855f7',
-      weight: 1.5,
-      fillColor: '#7e22ce',
-      fillOpacity: 0.15,
-      dashArray: '6, 6'
+  const currentMeshGeoJson = getKikikuruMeshForScenario(props.currentPresetId);
+
+  L.geoJSON(currentMeshGeoJson as any, {
+    pane: 'kikikuruPane',
+    style: (feature) => {
+      const p = feature?.properties || {};
+      const dangerLevel = p.dangerLevel || 4;
+      const isLevel3 = dangerLevel === 3;
+      const isLevel2 = dangerLevel === 2;
+      const color = p.color || (isLevel3 ? '#ef4444' : (isLevel2 ? '#eab308' : '#a855f7'));
+      const fillColor = p.fillColor || (isLevel3 ? '#dc2626' : (isLevel2 ? '#ca8a04' : '#7e22ce'));
+      const fillOpacity = p.fillOpacity ?? 0.28;
+
+      return {
+        color,
+        weight: 1.2,
+        fillColor,
+        fillOpacity,
+        className: 'kikikuru-grid-cell'
+      };
     },
     onEachFeature: (feature, layer) => {
+      // ホバー時に枠線をやや強調
+      layer.on('mouseover', () => {
+        (layer as L.Path).setStyle({
+          weight: 2.2,
+          fillOpacity: 0.42
+        });
+      });
+      layer.on('mouseout', () => {
+        const p = feature?.properties || {};
+        const isLevel3 = p.dangerLevel === 3;
+        const isLevel2 = p.dangerLevel === 2;
+        const color = p.color || (isLevel3 ? '#ef4444' : (isLevel2 ? '#eab308' : '#a855f7'));
+        const fillOpacity = p.fillOpacity ?? 0.28;
+        (layer as L.Path).setStyle({
+          weight: 1.2,
+          color,
+          fillOpacity
+        });
+      });
+
       layer.on('click', (e: L.LeafletMouseEvent) => {
         L.DomEvent.stopPropagation(e);
         if (!map) return;
+
+        const p = feature.properties || {};
+        const isLevel3 = p.dangerLevel === 3;
+        const badgeBg = isLevel3 ? '#ef4444' : '#a855f7';
+        const badgeText = isLevel3 ? '警戒レベル3相当（警戒・赤）' : '警戒レベル4相当（極めて危険・紫）';
+        const kindLabel = p.kikikuruKind === 'flood' ? '🌊 キキクル浸水害' : (p.kikikuruKind === 'combined' ? '🌪️ キキクル複合' : '⛰️ キキクル土砂');
+
         const popupHtml = `
-          <div style="padding: 6px 10px; font-size: 12px; font-weight: bold; color: #fff; line-height: 1.3;">
-            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
-              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #a855f7;"></span>
-              <span>危険（キキクル紫メッシュ）</span>
+          <div style="padding: 8px 12px; font-size: 12px; line-height: 1.4; color: #fff; min-width: 260px; max-width: 320px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+              <span style="background: ${badgeBg}; color: #ffffff; font-weight: 900; font-size: 10.5px; padding: 2px 7px; border-radius: 4px; box-shadow: 0 0 10px rgba(168, 85, 247, 0.4);">
+                📡 ${kindLabel}
+              </span>
+              <span style="color: ${isLevel3 ? '#fca5a5' : '#e9d5ff'}; font-size: 10px; font-weight: 800; font-family: monospace;">
+                ${p.timeText || '実況メッシュ'}
+              </span>
             </div>
-            <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">気象庁 1kmメッシュ危険度分布</div>
+
+            <div style="font-size: 13px; font-weight: 900; color: #ffffff; letter-spacing: 0.02em; line-height: 1.35;">
+              ${p.name || '気象庁 危険度分布メッシュ'}
+            </div>
+            ${p.targetArea ? `<div style="font-size: 11px; color: #cbd5e1; margin-top: 3px;">📍 対象地域: ${p.targetArea}</div>` : ''}
+            <div style="font-size: 10.5px; color: #a78bfa; margin-top: 2px;">
+              ${badgeText}（1km四方メッシュ単位）
+            </div>
+
+            ${p.comparisonNote ? `
+              <div style="margin-top: 8px; padding: 6px 8px; background: rgba(147, 51, 234, 0.18); border-left: 3px solid #a855f7; border-radius: 4px; font-size: 10.5px; color: #e9d5ff; line-height: 1.4;">
+                🔍 <strong>実演比較・問題提起:</strong><br>
+                ${p.comparisonNote}
+              </div>
+            ` : ''}
+
+            <div style="margin-top: 6px; font-size: 9.5px; color: #94a3b8; line-height: 1.3;">
+              ※本メッシュは実演比較用の気象庁実況再現データです。現在地内外判定（直撃/近接）には影響しません。
+            </div>
           </div>
         `;
+
         L.popup({
           className: 'nerv-popup',
           offset: [0, -6],
@@ -745,12 +882,13 @@ watch(
   { deep: true }
 );
 
-// ハザードデータ、災害種別タブ、シナリオが変更された時、再描画・レイヤー自動連動・ズーム
+// ハザードデータ、災害種別タブ、シナリオが変更された時、再描画・レイヤー自動連動・ズーム・キキクル同期
 watch(
   () => [props.hazardGeoJson, props.activeHazardTab, props.currentPresetId],
   () => {
     syncHazardLayersForScenario();
     renderHazardPolygons();
+    renderKikikuru();
     fitToHazards();
   },
   { deep: true }

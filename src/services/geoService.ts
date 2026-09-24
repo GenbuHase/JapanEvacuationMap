@@ -73,6 +73,11 @@ export function analyzeUserHazardSpatialIntersection(
       continue;
     }
 
+    // キキクルメッシュ（参考レイヤー）や広域参照メッシュは避難指示内外判定（直撃/近接）から除外する（案B）
+    if (feature.properties?.hazardType === 'kikikuru' || feature.properties?.isBroadMesh) {
+      continue;
+    }
+
     // ポリゴン内部判定 (Point-in-Polygon)
     const isInside = turf.booleanPointInPolygon(userPt, feature);
 
